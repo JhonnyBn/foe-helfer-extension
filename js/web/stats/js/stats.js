@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -23,16 +23,6 @@ FoEproxy.addHandler('GuildBattlegroundStateService', 'getState', async (data, po
 		Stats.HandlePlayerLeaderboard(data.responseData['playerLeaderboardEntries']);
 	}
 });
-//Currently in Outpost
-var isCurrentlyInOutpost = 0;
-FoEproxy.addHandler('CityMapService', 'getCityMap', async (data, postData) => {
-	if (data.responseData['gridId'] === 'cultural_outpost') {
-		isCurrentlyInOutpost=1;
-	}
-});
-FoEproxy.addHandler('CityMapService', 'getEntities', async (data, postData) => {
-		isCurrentlyInOutpost=0;
-});
 
 // Reward log
 FoEproxy.addHandler('RewardService', 'collectReward', async (data, postData) => {
@@ -46,12 +36,11 @@ FoEproxy.addHandler('RewardService', 'collectReward', async (data, postData) => 
 	if (rewardIncidentSource == "event_pass") {
 		if (postData[0].requestData[0].indexOf('guild_raids') >=0) rewardIncidentSource = 'guild_raids'
 	}
-
 	for (let reward of rewards) {
 
 		if (rewardIncidentSource === 'hidden_reward') {
 			//split flying island incidents from Ad-chests
-			if (isCurrentlyInOutpost === 1){
+			if (ActiveMap == 'cultural_outpost'){
 				rewardIncidentSource = 'shards';
 			}
 		}
@@ -78,7 +67,6 @@ FoEproxy.addHandler('RewardService', 'collectReward', async (data, postData) => 
 			delete reward.__class__;
 			await IndexDB.db.statsRewardTypes.put(reward);
 		}
-
 		// Add reward incident record
 
 		await Stats.addReward(rewardIncidentSource, reward.amount ||0, reward.id);
@@ -155,10 +143,10 @@ FoEproxy.addHandler('GuildRaidsMapService', 'getNodeExtendedInfo', async (data, 
 FoEproxy.addHandler('GuildRaidsMapService', 'getOverview', async (data, postData) => {
 	Stats.QI.currentNode = data.responseData.currentNode;
 }),
+
 FoEproxy.addHandler('GuildRaidsMapService', 'move', async (data, postData) => {
 	Stats.QI.currentNode = postData[0].requestData[0].pop();
 }),
-
 
 // Player treasure log
 FoEproxy.addHandler('ResourceService', 'getPlayerResources', async (data, postData) => {
@@ -177,6 +165,26 @@ FoEproxy.addHandler('ResourceService', 'getPlayerResources', async (data, postDa
 	await IndexDB.db.statsTreasurePlayerH.put({
 		date: moment().startOf('hour').toDate(),
 		resources: r.resources
+	});
+
+	StockAlarm.checkResources();
+});
+
+FoEproxy.addHandler('ResourceService', 'getPlayerResourceBag', async (data, postData) => {
+	if (data.responseData?.type?.value && data.responseData?.type?.value != 'PlayerMain') return; // for now ignore all other source types
+	const r = data.responseData?.resources?.resources || data.responseData?.resources;
+	if (!r) return;
+	
+	await IndexDB.getDB();
+
+    await IndexDB.db.statsTreasurePlayerD.put({
+		date: moment().startOf('day').toDate(),
+		resources: r
+	});
+
+	await IndexDB.db.statsTreasurePlayerH.put({
+		date: moment().startOf('hour').toDate(),
+		resources: r
 	});
 
 	StockAlarm.checkResources();
@@ -201,6 +209,28 @@ FoEproxy.addHandler('ClanService', 'getTreasury', async (data, postData) => {
 		date: moment().startOf('hour').toDate(),
 		clanId: ExtGuildID,
 		resources: r.resources
+	});
+	
+	StockAlarm.checkTreasury();
+});
+
+FoEproxy.addHandler('ClanService', 'getTreasuryBag', async (data, postData) => {
+	if (data.responseData?.type?.value && data.responseData?.type?.value != 'ClanMain') return; // for now ignore all other source types
+	const r = data.responseData?.resources?.resources || data.responseData?.resources;
+	if (!r) return;
+	
+    await IndexDB.getDB();
+
+	await IndexDB.db.statsTreasureClanD.put({
+		date: moment().startOf('day').toDate(),
+		clanId: ExtGuildID,
+		resources: r
+	});
+
+	await IndexDB.db.statsTreasureClanH.put({
+		date: moment().startOf('hour').toDate(),
+		clanId: ExtGuildID,
+		resources: r
 	});
 	
 	StockAlarm.checkTreasury();
@@ -243,8 +273,8 @@ let Stats = {
 	isVisitingCulturalOutpost: false,
 	goodsSubTypes:[],
 	ResMap: {
-		NoAge: ['money', 'supplies', 'tavern_silver', 'medals', 'premium'],
-		special: ['promethium', 'orichalcum', 'mars_ore', 'asteroid_ice', 'venus_carbon', 'unknown_dna','crystallized_hydrocarbons'],
+		NoAge: ['money', 'supplies', 'tavern_silver', 'medals', 'premium', 'guild_raids_medals'],
+		special: ['promethium', 'orichalcum', 'mars_ore', 'asteroid_ice', 'venus_carbon', 'unknown_dna','crystallized_hydrocarbons','dark_matter'],
 	},
 
 	QI:{
@@ -261,6 +291,7 @@ let Stats = {
 		eras: {}, // Selected era for filtering data,
 		eraSelectOpen: false, // Dropdown
 		isGroupByEra: false,
+		isRenormalize: false,
 		rewardSource: 'battlegrounds_conquest', // filter by type of reward
 		currentType: null,
 		filter:"",
@@ -319,12 +350,13 @@ let Stats = {
 	Show: (event) => {
 		if ($('#stats').length === 0) {
 			let args = {
-				'id': 'stats',
-				'title': i18n('Boxes.Stats.Title'),
-				'ask': i18n('Boxes.Stats.HelpLink'),
-				'auto_close': true,
-				'dragdrop': true,
-				'minimize': true
+				id: 'stats',
+				title: i18n('Boxes.Stats.Title'),
+				ask: i18n('Boxes.Stats.HelpLink'),
+				auto_close: true,
+				dragdrop: true,
+				popout: 'MainParser.PopOut(\'stats\', 1100, 600)',
+				minimize: true
 			};
 
 			HTML.Box(args);
@@ -376,6 +408,10 @@ let Stats = {
 
 				case 'groupByToggle':
 					Stats.state.isGroupByEra = !Stats.state.isGroupByEra;
+					break;
+
+				case 'renormalizeToggle':
+					Stats.state.isRenormalize = !Stats.state.isRenormalize;
 					break;
 
 				case 'selectSource':
@@ -538,6 +574,14 @@ let Stats = {
 			value: Technologies.EraNames[CurrentEraID]
 		});
 
+		const btnSelectNextEra = Stats.RenderButton({
+			name: i18n('Boxes.Stats.BtnNextEra'),
+			isActive: selectedEras.length === 1 && selectedEras[0] === Technologies.EraNames[CurrentEraID + 1],
+			dataType: 'selectEras',
+			disabled: !Stats.isSelectedPlayerSources() && !Stats.isSelectedTreasureSources() && !Stats.isSelectedUnitSources(),
+			value: Technologies.EraNames[CurrentEraID + 1]
+		});
+
 		const btnSelectAll = Stats.RenderButton({
 			name: i18n('Boxes.Stats.BtnAll'),
 			title: i18n('Boxes.Stats.BtnAllTittle'),
@@ -573,6 +617,14 @@ let Stats = {
 			disabled: !Stats.isSelectedPlayerSources() && !Stats.isSelectedTreasureSources(),
 			isActive: Stats.state.isGroupByEra,
 			dataType: 'groupByToggle',
+		});
+
+		const btnGroupRenormalize = Stats.RenderBox({
+			name: i18n('Boxes.Stats.BtnToggleRenormalize'),
+			title: i18n('Boxes.Stats.BtnToggleRenormalizeTitle'),
+			disabled: !Stats.isSelectedPlayerSources() && !Stats.isSelectedTreasureSources(),
+			isActive: Stats.state.isRenormalize,
+			dataType: 'renormalizeToggle',
 		});
 
 		const sourceBtns = [
@@ -636,13 +688,14 @@ let Stats = {
 					<span class="btn-group">
 					${btnSelectAllEra}
 					${btnSelectMyEra}
+					${Technologies.EraNames[CurrentEraID + 1] ? btnSelectNextEra : ''}
 					${CurrentEraID > 2 ? btnSelectTwoLastEra : ''}
 					${btnSelectAll}
 					${btnSelectNoEra}
 					</span>
 				</div>
 				<div class="option-chart-type-wrap text-center">
-					<br>
+					${btnGroupRenormalize}<br>
 					<span class="btn-group">
 					${chartTypes.join('')}
 					</span>
@@ -656,7 +709,7 @@ let Stats = {
 					</ul>
 				</div>`
 				+ moreOptions +
-				`<div class="datepicker"><button class="btn btn-default" id="StatsDatePicker">${Stats.formatRange()}</button></div>`;
+				`<div class="datepicker"><button class="btn" id="StatsDatePicker">${Stats.formatRange()}</button></div>`;
 	},
 
 	formatRange: ()=> {
@@ -762,7 +815,7 @@ let Stats = {
 	 * @param disabled	Disabled button
 	 * @returns {string}
 	 */
-	RenderButton: ({ name, isActive, dataType, value, title, disabled }) => `<button ${disabled ? 'disabled' : ''} class="btn btn-default btn-tight${!disabled && isActive ? ' btn-active' : ''} ${dataType}" data-type="${dataType}" data-value="${value}" title="${(title || '').replace(/"/g,'&quot;')}"><span>${name}</span></button>`,
+	RenderButton: ({ name, isActive, dataType, value, title, disabled }) => `<button ${disabled ? 'disabled' : ''} class="btn btn-slim${!disabled && isActive ? ' btn-active' : ''} ${dataType}" data-type="${dataType}" data-value="${value}" title="${(title || '').replace(/"/g,'&quot;')}"><span>${name}</span></button>`,
 
 
 	/**
@@ -1031,7 +1084,7 @@ let Stats = {
 			colors,
 			pointFormat: `<tr>
 								<td>
-									<span class="goods-sprite-50 {series.options.goodsId}"></span>
+									<span class="goods-sprite sprite-50 {series.options.goodsId}"></span>
 								</td>
 								<td>
 									<span style="margin: 0 5px;"><span style="color:{point.color}">●</span> {series.name}: </span>
@@ -1135,7 +1188,7 @@ let Stats = {
 			colors,
 			pointFormat: `<tr>
 								<td>
-									<span class="goods-sprite-50 {series.options.goodsId}"></span>
+									<span class="goods-sprite sprite-50 {series.options.goodsId}"></span>
 								</td>
 								<td>
 									<span style="margin: 0 5px;"><span style="color:{point.color}">●</span> {series.name}: </span>
@@ -1172,6 +1225,15 @@ let Stats = {
 				return s;
 			});
 			series = series.filter(s => (s.data?.length | 0) > 0);
+		} else if (Stats.state.isRenormalize) {
+			series = series.map(s => {
+				let vals = s.data.map(x=>x[1])
+				let min = Math.min(...vals);
+				let max = Math.max(...vals);
+				let range = max - min;
+				s.data = s.data.map(it => [it[0], max==0 ? 1 : (it[1]) / max]);
+				return s;
+			});
 		}
 
 		return {
@@ -1741,7 +1803,7 @@ let StockAlarm = {
 		htmltext += `<img class="options" data-repeat="2" src="${extUrl}js/web/stats/images/once.png">`;
 		htmltext += `<img class="options  selected" data-repeat="1" src="${extUrl}js/web/stats/images/once_per_session.png">`;
 		htmltext += `<img class="options" data-repeat="0" src="${extUrl}js/web/stats/images/always.png"></span>`
-		htmltext += `<span id="LowStockAddBtn" class="btn btn-default btn-green" onclick="StockAlarm.addbtn">+</span>`;
+		htmltext += `<span id="LowStockAddBtn" class="btn btn-green" onclick="StockAlarm.addbtn">+</span>`;
 		htmltext += `<table class="foe-table" id="LowStockAlarmsList">`;
 		htmltext += `<tr><th>type</th><th>name</th><th>threshold</th><th>repeat</th><th></th></tr>` //Add i18n!!
 		htmltext += `</table>`;
@@ -1827,7 +1889,7 @@ let StockAlarm = {
 		html += `<td>${name}</td>`;
 		html += `<td>${value}</td>`;
 		html += `<td><img src="${repeatImg}"></td>`;
-		html += `<td><span class="btn btn-default btn-delete LowStockRemBtn" data-id="${id}" data-name="${name}" data-value="${value}" data-repeat="${repeat}" data-type="${type}" onclick="StockAlarm.rembtn(event)">-</span></td>`;
+		html += `<td><span class="btn btn-delete LowStockRemBtn" data-id="${id}" data-name="${name}" data-value="${value}" data-repeat="${repeat}" data-type="${type}" onclick="StockAlarm.rembtn(event)">-</span></td>`;
 		
 		row.innerHTML = html;
 		

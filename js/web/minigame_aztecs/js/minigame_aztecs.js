@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -17,28 +17,10 @@ FoEproxy.addHandler('CollectingMinigameService', 'start', (data, postData) => {
     if (r.context !== "merchant") {
         return;
     }
-
-    if ($('#minigame_aztecs-Btn').hasClass('hud-btn-red')) {
-        $('#minigame_aztecs-Btn').removeClass('hud-btn-red');
-        $('#minigame_aztecs-Btn-closed').remove();
-    }
-    AztecsHelper.mapHeight = r.height;
-    AztecsHelper.mapWidth = r.width;
-    AztecsHelper.boughtSomething = false;
-    let arr = new Array(AztecsHelper.mapHeight);
-    for (var i = 0; i < AztecsHelper.mapHeight; i++) {
-        arr[i] = new Array(AztecsHelper.mapWidth);
-        for (let j = 0; j < arr[i].length; j++) {
-            arr[i][j] = {content: AztecsHelper.unknownCell, prob: 0};
-        }
-    }
-    AztecsHelper.grid = arr;
-    if (r.reward.resources === undefined || Object.values(r.reward.resources) <= 0) return;
-    AztecsHelper.ResourcesLeft = Object.values(r.reward.resources)[0];
-    if (Settings.GetSetting('ShowAztecHelper')){
-        AztecsHelper.Show();
-        AztecsHelper.CalcBody();
-    }
+    AztecsHelper.startData = r;
+    AztecsHelper.timeout = setTimeout(() => {
+        AztecsHelper.start()
+    }, 200);
 });
 
 FoEproxy.addHandler('CollectingMinigameService', 'submitMove', (data, postData) => {
@@ -111,35 +93,15 @@ FoEproxy.addHandler('ResourceShopService', 'buyResources', (data, postData) => {
 });
 
 FoEproxy.addHandler('ResourceService', 'getPlayerResources', (data, postData) => {
-    if(postData[0].requestData.filter(x => x?.mainType === "cultural_outpost" && x?.subType === "collecting_minigame_buy_turns").length > 0){
-        if(postData[0].requestData.filter(x => x?.["resources"] !== undefined)?.[0]?.resources?.aztecs_collecting_minigame_turns > 0){
-            AztecsHelper.boughtSomething = true;
-        }else{
-            AztecsHelper.boughtSomething = false;
-        }
-    }else{
-        AztecsHelper.boughtSomething = false;
+    AztecsHelper.processResources(data,postData);
+    if (AztecsHelper.timeout !== null) {
+        AztecsHelper.start()
     }
-
-    const r = data.responseData;
-    if (!r.resources) {
-        return;
-    }
-    AztecsHelper.MovesLeft = r.resources.aztecs_collecting_minigame_turns || 0;
-
-    if(AztecsHelper.boughtSomething && AztecsHelper.MovesLeft > 0){
-        AztecsHelper.boughtSomething = false;
-        if (Settings.GetSetting('ShowAztecHelper')){
-            AztecsHelper.Show();
-        }
-    }
-
-    if(AztecsHelper.MovesLeft == 0 && $('#aztecsHelper').length > 0){
-        if (!$('#minigame_aztecs-Btn').hasClass('hud-btn-red')) {
-            $('#minigame_aztecs-Btn').addClass('hud-btn-red');
-            _menu.toolTipp($('#minigame_aztecs-Btn'),"Aztec Helper", '<em id="minigame_aztecs-Btn-closed" class="tooltip-error">Opens automatically when starting a aztec mini game<br></em>Aztec Minigame Helper -BETA-');
-        }
-        HTML.CloseOpenBox('aztecsHelper');
+});
+FoEproxy.addHandler('ResourceService', 'getPlayerResourceBag', (data, postData) => {
+    AztecsHelper.processResources(data,postData);
+    if (AztecsHelper.timeout !== null) {
+        AztecsHelper.start()
     }
 });
 
@@ -161,6 +123,37 @@ let AztecsHelper = {
     mapWidth: 0,
 
     grid: [],
+    timeout: null,
+    startData: null,
+    start: () => {
+        let r = AztecsHelper.startData;
+        if (AztecsHelper.timeout !== null) {
+            clearTimeout(AztecsHelper.timeout);
+            AztecsHelper.timeout = null;
+        }
+        if ($('#minigame_aztecs-Btn').hasClass('hud-btn-red')) {
+            $('#minigame_aztecs-Btn').removeClass('hud-btn-red');
+            $('#minigame_aztecs-Btn-closed').remove();
+        }
+        AztecsHelper.mapHeight = r.height;
+        AztecsHelper.mapWidth = r.width;
+        AztecsHelper.boughtSomething = false;
+        let arr = new Array(AztecsHelper.mapHeight);
+        for (var i = 0; i < AztecsHelper.mapHeight; i++) {
+            arr[i] = new Array(AztecsHelper.mapWidth);
+            for (let j = 0; j < arr[i].length; j++) {
+                arr[i][j] = {content: AztecsHelper.unknownCell, prob: 0};
+            }
+        }
+        AztecsHelper.grid = arr;
+        if (r.reward.resources === undefined || Object.values(r.reward.resources) <= 0) return;
+        AztecsHelper.ResourcesLeft = Object.values(r.reward.resources)[0];
+        if (Settings.GetSetting('ShowAztecHelper')){
+            AztecsHelper.Show();
+            AztecsHelper.CalcBody();
+        }
+    },
+
 
     Show: () => {
         if ($('#aztecsHelper').length === 0) {
@@ -171,7 +164,9 @@ let AztecsHelper = {
                 'title': i18n('Boxes.AztecMiniGame.Title'),
                 'auto_close': true,
                 'minimize': true,
-                'dragdrop': false
+                'dragdrop': false,
+			    active_maps:"cultural_outpost",
+				settings: 'AztecsHelper.ShowSettings()',
             });
 
             // CSS in den DOM prügeln
@@ -285,6 +280,26 @@ let AztecsHelper = {
             $('#aztecsHelper').length > 0 && HTML.CloseOpenBox('aztecsHelper');
         }
     },
+
+	ShowSettings: () => {
+		let autoOpen = Settings.GetSetting('ShowAztecHelper');
+
+		let h = [];
+		h.push(`<p><label><input id="aztecsAutoOpen" type="checkbox" ${(autoOpen === true) ? ' checked="checked"' : ''} />${i18n('Boxes.Settings.Autostart')}</label></p>`);
+		h.push(`<p><button onclick="AztecsHelper.SaveSettings()" id="save-aztecsAutoOpen-settings" class="btn" style="width:100%">${i18n('Boxes.Settings.Save')}</button></p>`);
+
+		$('#aztecsHelperSettingsBox').html(h.join(''));
+	},
+
+	SaveSettings: () => {
+		let value = false;
+		if ($("#aztecsAutoOpen").is(':checked'))
+			value = true;
+		localStorage.setItem('ShowAztecHelper', value);
+		
+		$(`#aztecsHelperSettingsBox`).remove();
+	},
+
     /**
      * Checks adjacent cells for possible Resources
      * @param {number} x //Width
@@ -559,6 +574,37 @@ let AztecsHelper = {
         AztecsHelper.grid = JSON.parse('[[{"content":1},{"content":1},{"content":" "},{"content":" "},{"content":" "},{"content":1},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"}],[{"content":"?"},{"content":1},{"content":" "},{"content":" "},{"content":" "},{"content":2},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"}],[{"content":1},{"content":1},{"content":" "},{"content":" "},{"content":" "},{"content":1},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"}],[{"content":" "},{"content":" "},{"content":" "},{"content":" "},{"content":" "},{"content":2},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"}],[{"content":1},{"content":1},{"content":1},{"content":" "},{"content":" "},{"content":1},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"}],[{"content":"?"},{"content":"?"},{"content":3},{"content":2},{"content":1},{"content":2},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"}],[{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"},{"content":"?"}]]');
         AztecsHelper.CalcAdjacentCells();
     },
+    processResources: (data,postData)=>{
+	    if (data.responseData?.type?.value && data.responseData?.type?.value != 'PlayerMain') return; // for now ignore all other source types
+        if (postData[0].requestData.filter(x => x?.mainType === "cultural_outpost" && x?.subType === "collecting_minigame_buy_turns").length > 0){
+            if (postData[0].requestData.filter(x => x?.["resources"] !== undefined)?.[0]?.resources?.aztecs_collecting_minigame_turns > 0){
+                AztecsHelper.boughtSomething = true;
+            }else{
+                AztecsHelper.boughtSomething = false;
+            }
+        } else {
+            AztecsHelper.boughtSomething = false;
+        }
 
+        const r = data?.responseData?.resources?.resources || data?.responseData?.resources
+        if (!r) return
+        
+        AztecsHelper.MovesLeft = r.aztecs_collecting_minigame_turns || 0;
+
+        if(AztecsHelper.boughtSomething && AztecsHelper.MovesLeft > 0){
+            AztecsHelper.boughtSomething = false;
+            if (Settings.GetSetting('ShowAztecHelper')){
+                AztecsHelper.Show();
+            }
+        }
+
+        if(AztecsHelper.MovesLeft == 0 && $('#aztecsHelper').length > 0){
+            if (!$('#minigame_aztecs-Btn').hasClass('hud-btn-red')) {
+                $('#minigame_aztecs-Btn').addClass('hud-btn-red');
+                _menu.toolTipp($('#minigame_aztecs-Btn'),"Aztec Helper", '<em id="minigame_aztecs-Btn-closed" class="tooltip-error">Opens automatically when starting a aztec mini game<br></em>Aztec Minigame Helper -BETA-');
+            }
+            HTML.CloseOpenBox('aztecsHelper');
+        }
+    }
 
 };

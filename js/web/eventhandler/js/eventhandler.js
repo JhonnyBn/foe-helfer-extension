@@ -1,7 +1,7 @@
 ﻿/*
  * *************************************************************************************
  *
- * Copyright (C) 2024 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -259,13 +259,10 @@ let EventHandler = {
 				// get the correct 24h time
 				if(match['groups']['half'])
 				{
-					if(match['groups']['half'] === 'am' && h === 12)
-					{
-						h = 12;
-					}
-					else if(match['groups']['half'] === 'am' && h !== 12)
-					{
+					if(match['groups']['half'] === 'pm' && h !== 12) {
 						h += 12;
+					} else if (match['groups']['half'] === 'am' && h === 12) {
+						h = 0;
 					}
 				}
 
@@ -280,7 +277,10 @@ let EventHandler = {
 					case 'yesterday':
 						refDate = moment().subtract(1, 'day');
 						break;
-
+					case 'date':
+						moment.locale(OldLocale);
+						refDate = moment([Number(match['groups']['year'])+(match['groups']['year'].length<=2 ? 2000:0),Number(match['groups']['month'])-1,Number(match['groups']['day'])])
+						break;
 					default:
 						refDate = moment().day(capitalize(day));
 						if (refDate.isAfter(MainParser.getCurrentDate())) refDate = refDate.subtract(7 * 86400000); //Date is in the future => subtract 1 week
@@ -514,6 +514,7 @@ let EventHandler = {
 		h.push('<th data-export="Rank" class="is-number ascending" data-type="moppelhelper">' + i18n('Boxes.MoppelHelper.Rank') + '</th>');
 		h.push('<th></th>');
 		h.push('<th data-export="Name" data-type="moppelhelper" class="name-col">' + i18n('Boxes.MoppelHelper.Name') + '</th>');
+        h.push('<th style="display:none" data-export="Player_ID"></th>');
 		if (EventHandler.CurrentPlayerGroup !== 'Guild' && EventHandler.ShowHideColumns.GuildName) {
 			h.push('<th data-export="GuildName" data-type="moppelhelper" class="name-col">' + i18n('General.Guild') + '</th>');
 		}
@@ -585,6 +586,9 @@ let EventHandler = {
 			h.push(`<span class="activity activity_${Player['Activity']}"></span> `);
 			h.push(MainParser.GetPlayerLink(Player['PlayerID'], Player['PlayerName']));
 
+            // Player ID
+            h.push('<td style="display:none" data-text="' + Player['PlayerID'] + '">' + Player['PlayerID'] + '</td>');
+
 			// Guild name column
 			if (EventHandler.CurrentPlayerGroup != 'Guild' && EventHandler.ShowHideColumns.GuildName) {
 				h.push('<td style="white-space:nowrap;text-align:left;" data-text="' + (helper.str.cleanup(Player['ClanName'] || "")) + '">');
@@ -612,7 +616,7 @@ let EventHandler = {
 					let FormatedDays = HTML.i18nReplacer(i18n('Boxes.MoppelHelper.Days'), { 'days': Math.round(Days) });
 					let EventType = EventHandler.GetEventType(Visits[j]);
 
-					h.push('<td style="white-space:nowrap" class="events-image" data-number="' + Days + '"><span class="events-sprite-50 sm ' + EventType + '"></span><strong style="color:#' + StrongColor + '">' + FormatedDays + '</strong></td>');
+					h.push('<td style="white-space:nowrap" class="events-image" data-number="' + Days + '"><span class="events-sprite-35 ' + EventType + '"></span><strong style="color:#' + StrongColor + '">' + FormatedDays + '</strong></td>');
 				}
 				else {
 					h.push('<td class="is-date" data-number="999999999"><strong style="color:#ff0000">' + i18n('Boxes.MoppelHelper.Never') + '</strong></td>');
@@ -650,8 +654,8 @@ let EventHandler = {
 	*/
 	ShowMoppelHelperSettingsButton: () => {
 		let h = [];
-		h.push(`<p class="text-center"><button class="btn btn-default" onclick="HTML.ExportTable($('#moppelhelperBody').find('.foe-table.exportable'), 'csv', 'MoppelHelper${EventHandler.CurrentPlayerGroup}')">${i18n('Boxes.General.ExportCSV')}</button></p>`);
-		h.push(`<p class="text-center"><button class="btn btn-default" onclick="HTML.ExportTable($('#moppelhelperBody').find('.foe-table.exportable'), 'json', 'MoppelHelper${EventHandler.CurrentPlayerGroup}')">${i18n('Boxes.General.ExportJSON')}</button></p>`);
+		h.push(`<p class="text-center"><button class="btn" onclick="HTML.ExportTable($('#moppelhelperBody').find('.foe-table.exportable'), 'csv', 'MoppelHelper${EventHandler.CurrentPlayerGroup}')">${i18n('Boxes.General.ExportCSV')}</button></p>`);
+		h.push(`<p class="text-center"><button class="btn" onclick="HTML.ExportTable($('#moppelhelperBody').find('.foe-table.exportable'), 'json', 'MoppelHelper${EventHandler.CurrentPlayerGroup}')">${i18n('Boxes.General.ExportJSON')}</button></p>`);
 
 		$('#moppelhelperSettingsBox').html(h.join(''));
 	},
@@ -676,6 +680,7 @@ let EventHandler = {
 				friday    	: /Freitag um (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
 				saturday  	: /Samstag um (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
 				sunday   	: /Sonntag um (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
+				date	   	: /am (?<day>.*?)\.(?<month>.*?)\.(?<year>.*?) um (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
 			},
 			en: {
 				today     : /today at (?<h>[012]?\d):(?<m>[0-5]?\d) (?<half>(a|p)m)/g,
@@ -687,6 +692,7 @@ let EventHandler = {
 				friday    : /Friday at (?<h>[012]?\d):(?<m>[0-5]?\d) (?<half>(a|p)m)/g,
 				saturday  : /Saturday at (?<h>[012]?\d):(?<m>[0-5]?\d) (?<half>(a|p)m)/g,
 				sunday    : /Sunday at (?<h>[012]?\d):(?<m>[0-5]?\d) (?<half>(a|p)m)/g,
+				date      : /on (?<month>.*?)\/(?<day>.*?)\/(?<year>.*?) at (?<h>[012]?\d):(?<m>[0-5]?\d) (?<half>(a|p)m)/g,
 			},
 			pt: {
 				today     : /hoje às (?<h>[012]?\d):(?<m>[0-5]?\d)( horas)?/g,
@@ -720,6 +726,7 @@ let EventHandler = {
 				friday    : /Vendredi à (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
 				saturday  : /Samedi à (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
 				sunday    : /Dimanche à (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
+				date 	  : /le (?<day>.*?)\/(?<month>.*?)\/(?<year>.*?) à (?<h>[012]?\d):(?<m>[0-5]?\d)/g,
 			},
 			it: {
 				today     : /oggi alle (?<h>[012]?\d):(?<m>[0-5]?\d)/g,

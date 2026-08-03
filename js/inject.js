@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -15,7 +15,6 @@
 {
 let scripts = {
 	main: ["once", "primed"],
-	proxy: ["once", "primed"],
 	vendor: ["once", "primed"],
 	internal: ["once", "primed"]
 };
@@ -30,10 +29,6 @@ function scriptLoaded (src, base) {
 		scripts.main.splice(scripts.main.indexOf("once"),1);
 		window.dispatchEvent(new CustomEvent('foe-helper#mainloaded'));
 	}
-	if (scripts.proxy.length == 1) {
-		scripts.proxy.splice(scripts.proxy.indexOf("once"),1);
-		window.dispatchEvent(new CustomEvent('foe-helper#proxyloaded'));
-	}
 	if (scripts.vendor.length == 1) {
 		scripts.vendor.splice(scripts.vendor.indexOf("once"),1);
 		window.dispatchEvent(new CustomEvent('foe-helper#vendors-loaded'));
@@ -41,7 +36,6 @@ function scriptLoaded (src, base) {
 };
 
 inject();
-
 
 function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate='') {
 	/**
@@ -53,6 +47,7 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 	 function promisedLoadCode(src, base="base") {
 		return new Promise(async (resolve, reject) => {
 			let sc = document.createElement('script');
+			sc.async = false;
 			sc.src = src;
 			if (scripts[base]) {
 				scripts[base].push(src);
@@ -66,10 +61,6 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 				console.error('error loading script '+src);
 				this.remove();
 				reject();
-			});
-			while (!document.head && !document.documentElement) await new Promise((resolve) => {
-				// @ts-ignore
-				requestIdleCallback(resolve);
 			});
 			(document.head || document.documentElement).appendChild(sc);
 		});
@@ -95,12 +86,6 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 			resolve();
 		}, {capture: false, once: true, passive: true});
 	});
-	const proxyLoaded = new Promise(resolve => {
-		window.addEventListener('foe-helper#proxyloaded', evt => {
-			resolve();
-		}, {capture: false, once: true, passive: true});
-	});
-
 	
 	const v = chrome.runtime.getManifest().version + (loadBeta ? '-beta-'+ betaDate:'');
 
@@ -128,11 +113,12 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 
 
 	let tid = setInterval(InjectCSS, 0);
+
 	function InjectCSS() {
 		// Document loaded
 		if(document.head !== null){
 			let MenuSetting = localStorage.getItem('SelectedMenu');
-			MenuSetting = MenuSetting ? MenuSetting : 'BottomBar';
+			MenuSetting = MenuSetting ? MenuSetting : 'RightBar';
 			let cssname = "_menu_" + MenuSetting.toLowerCase().replace("bar","");
 
 			let cssFiles = [
@@ -143,8 +129,7 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 			];
 
 			// insert stylesheet
-			for(let i in cssFiles)
-			{
+			for(let i in cssFiles) {
 				if(!cssFiles.hasOwnProperty(i)) {
 					break;
 				}
@@ -173,7 +158,7 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 			
 			// Firefox does not support direct communication with background.js but API injections
 			// So the the messages have to be forwarded and this exports an API-Function to do so
-			if (!chrome.extension && exportFunction && window.wrappedJSObject) {
+			if (window.navigator.userAgent.indexOf("Firefox") > -1 && exportFunction && window.wrappedJSObject) {
 				function callBgApi(data) {
 					return new window.Promise(
 						exportFunction(
@@ -203,12 +188,7 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 			// start loading both script-lists
 			const vendorListPromise = loadJsonResource(`${extUrl}js/vendor.json`);
 			const scriptListPromise = loadJsonResource(`${extUrl}js/internal.json`);
-			
-			// load foe-Proxy
-			await promisedLoadCode(chrome.runtime.getURL('')+`js/foeproxy.js`,"proxy");
-			scriptLoaded("primed", "proxy");
-			await proxyLoaded;
-			// load the main
+			// load main
 			await promisedLoadCode(`${extUrl}js/web/_main/js/_main.js`,"main");
 			scriptLoaded("primed", "main");
 			await mainLoaded;
@@ -216,21 +196,34 @@ function inject (loadBeta = false, extUrl = chrome.runtime.getURL(''), betaDate=
 			// wait for ant and i18n to be loaded
 			await jQueryLoading;
 
-			// load all vendor scripts first (unknown order)
+			// load all vendor scripts parallel (execution order is preserved)
 			const vendorScriptsToLoad = await vendorListPromise;
+			const vendorPromises = [];
 			for (let i = 0; i < vendorScriptsToLoad.length; i++){
-				await promisedLoadCode(`${extUrl}vendor/${vendorScriptsToLoad[i]}.js?v=${v}`,"vendor");
+				vendorPromises.push(promisedLoadCode(`${extUrl}vendor/${vendorScriptsToLoad[i]}.js?v=${v}`,"vendor"));
 			}
-			//await Promise.all(vendorScriptsToLoad.map(vendorScript => promisedLoadCode(`${extUrl}vendor/${vendorScript}.js?v=${v}`,"vendor")));
+			await Promise.all(vendorPromises);
 			
 			scriptLoaded("primed", "vendor");
 			
-			// load scripts (one after the other)
+			// load scripts (parallel, execution order is preserved)
 			const internalScriptsToLoad = await scriptListPromise;
+			const internalPromises = [];
 
 			for (let i = 0; i < internalScriptsToLoad.length; i++){
-				await promisedLoadCode(`${extUrl}js/web/${internalScriptsToLoad[i]}/js/${internalScriptsToLoad[i]}.js?v=${v}`, "internal");
+				let entry = internalScriptsToLoad[i];
+				let scriptName = typeof entry === 'string' ? entry : entry.name;
+				let parts = typeof entry === 'object' ? entry.parts : [];
+
+				internalPromises.push(promisedLoadCode(`${extUrl}js/web/${scriptName}/js/${scriptName}.js?v=${v}`, "internal"));
+
+				if (parts && parts.length > 0) {
+					for (let p of parts) {
+						internalPromises.push(promisedLoadCode(`${extUrl}js/web/${scriptName}/js/parts/${p}.js?v=${v}`, "internal"));
+					}
+				}
 			}
+			await Promise.all(internalPromises);
 					
 			scriptLoaded("primed", "internal");
 

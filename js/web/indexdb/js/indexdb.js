@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -147,6 +147,9 @@ let IndexDB = {
             statsTreasureClanH: 'date, clanId',
             statsTreasureClanD: 'date, clanId',
         });
+        db.version(3).stores({
+            buildingMeta: 'id, hash, json',
+        });
     },
 
     /**
@@ -288,7 +291,7 @@ let IndexDB = {
         }
 
         function log(text) {
-            console.log('mergeDatabases: ' + text);
+            //console.log('mergeDatabases: ' + text);
             let logTxt = localStorage.getItem('FH_IndexDBLastMigraion') || '';
             logTxt += text + '\n';
             localStorage.setItem('FH_IndexDBLastMigraion', logTxt);

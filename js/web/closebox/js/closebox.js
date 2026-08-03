@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -110,12 +110,12 @@ let CloseBox = {
 
         if (CloseBox.Settings.HideAllButton)
         {
-            h.push(`<button style="width: ${bs}px; height: ${bs}px; font-size: ${Math.round(bs / 2)}px;" id="cb-hide-all-windows" class="btn btn-default btn-green closebox${align}">&#128065</button>`);
+            h.push(`<button style="width: ${bs}px; height: ${bs}px; font-size: ${Math.round(bs / 2)}px;" id="cb-hide-all-windows" class="btn btn-green closebox${align}">&#128065</button>`);
         }
 
         if (CloseBox.Settings.CloseAllButton)
         {
-            h.push(`<button style="width: ${bs}px; height: ${bs}px; font-size: ${Math.round(bs / 2)}px;" id="cb-close-all-windows" class="btn btn-default closebox${align}">X</button>`);
+            h.push(`<button style="width: ${bs}px; height: ${bs}px; font-size: ${Math.round(bs / 2)}px;" id="cb-close-all-windows" class="btn closebox${align}">X</button>`);
         }
 
         $('#CloseBoxBody').html(h.join('')).promise().done(function () {
@@ -164,6 +164,8 @@ let CloseBox = {
 
         $("#cb-hide-all-windows").removeClass("invisible btn-delete").addClass("btn-green");
         $(".window-box, #foe-helper-hud, .helper-blocker").show();
+        $("#TooltipContainer").hide();
+        
     },
 
 
@@ -173,7 +175,7 @@ let CloseBox = {
 
         $.each(openBoxes, function () {
             let box = $(this);
-            if (box.attr('id') !== 'CloseBox' && !CloseBox.Settings.Excludes.includes(box.attr('id')))
+            if (box.attr('id') !== 'CloseBox' && box.attr('id') !== 'TooltipContainer' && !CloseBox.Settings.Excludes.includes(box.attr('id')))
             {
                 box.remove();
             }
@@ -214,7 +216,7 @@ let CloseBox = {
         }
         c.push(`<p class="text-left"><span class="settingtitle">${i18n('Boxes.CloseBox.Automation')}</span>`);
         c.push(`<input id="cb_auto_hide_on_battle" name="autohideonbattle" value="1" type="checkbox" ${(Settings.AutoHideOnBattle) ? ' checked="checked"' : ''} /> <label for="cb_auto_hide_on_battle"><i>${i18n('Boxes.CloseBox.AutoHideOnBattle')}</i></label></p>`);
-        c.push(`<hr><p><button id="save-GexStat-settings" class="btn btn-default" style="width:100%" onclick="CloseBox.SaveSettings()">${i18n('Boxes.General.Save')}</button></p>`);
+        c.push(`<hr><p><button id="save-GexStat-settings" class="btn" style="width:100%" onclick="CloseBox.SaveSettings()">${i18n('Boxes.General.Save')}</button></p>`);
 
         $('#CloseBoxSettingsBox').html(c.join(''));
 

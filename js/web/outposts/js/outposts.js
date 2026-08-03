@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -46,7 +46,8 @@ let Outposts = {
 				auto_close: true,
 				dragdrop: true,
 				minimize: true,
-				resize: true
+				resize: true,
+			    active_maps:"cultural_outpost"
 				// popout: 'Outposts.PopOutBox()'
 			};
 
@@ -317,8 +318,8 @@ let Outposts = {
 		for (let resourceID of resourceIDs)
 		{
 			let IconID = resourceID;
-			if (resourceID === 'barley' || resourceID === 'pottery' || resourceID === 'flowers' || resourceID === 'sacrificial_offerings') IconID = 'fine_' + IconID;
-			t.push(`<th class="text-center"><span class="goods-sprite-50 ${IconID} goods-name" title="${GoodsData[resourceID].name}"></span></th>`);
+			if (['barley', 'pottery', 'flowers', 'sacrificial_offerings','fresh_fish','coconuts','kava','catamarans'].includes(resourceID)) IconID = 'fine_' + IconID;
+			t.push(`<th class="text-center"><span class="goods-sprite sprite-50 ${IconID} goods-name" title="${GoodsData[resourceID].name}"></span></th>`);
 		}
 
 		t.push('</tr>');
@@ -531,7 +532,7 @@ let Outposts = {
 
 		t.push('<tr>');
 		t.push('<td colspan="8" class="text-right">');
-		t.push(`<button class="btn-default" onclick="Outposts.SubmitData()">${i18n('Boxes.CityMap.OutpostSubmit')}</button>`);
+		t.push(`<button class="btn" onclick="Outposts.SubmitData()">${i18n('Boxes.CityMap.OutpostSubmit')}</button>`);
 		t.push('</td>');
 		t.push('</tr>');
 
@@ -653,7 +654,10 @@ let Outposts = {
 		if(apiToken === null) {
 			HTML.ShowToastMsg({
 				head: i18n('Boxes.CityMap.MissingApiKeyErrorHeader'),
-				text: i18n('Boxes.CityMap.MissingApiKeySubmitError'),
+				text: [
+					i18n('Boxes.CityMap.MissingApiKeySubmitError'),
+					`<a target="_blank" href="${i18n('Settings.ApiTokenUrl')}">${i18n('Settings.ApiTokenUrl')}</a>`
+				],
 				type: 'error',
 				hideAfter: 10000,
 			});
@@ -668,15 +672,18 @@ let Outposts = {
 					name: ExtPlayerName,
 					id: ExtPlayerID,
 					world: ExtWorld,
-					avatar: ExtPlayerAvatar
+					avatar: ExtPlayerAvatar,
+					avatarUrl: srcLinks.GetPortrait(ExtPlayerAvatar),
+					era: CurrentEra,
+					era_id: CurrentEraID
 				},
 				apiToken: apiToken,
 				type: localStorage.getItem('OutpostType'),
 				eras: Technologies.Eras,
-				entities: Outposts.CityMap['entities'],
-				areas: Outposts.CityMap['unlocked_areas'],
-				blockedAreas: Outposts.CityMap['blocked_areas'],
-				allEntities: Outposts.Advancements
+				entities: CityMap.removeDoubleUnderscoreKeys(Outposts.CityMap['entities']),
+				areas: CityMap.removeDoubleUnderscoreKeys(Outposts.CityMap['unlocked_areas']),
+				blockedAreas: CityMap.removeDoubleUnderscoreKeys(Outposts.CityMap['blocked_areas']),
+				allEntities: CityMap.removeDoubleUnderscoreKeys(Outposts.Advancements)
 			};
 
 		MainParser.send2Server(d, 'CityPlanner', function(resp){
@@ -692,15 +699,32 @@ let Outposts = {
 					type: 'success',
 					hideAfter: 10000,
 				});
+
+				// nicht-kritische Serverfehler (Cache-Dateien, Avatar, ...) trotzdem anzeigen
+				if (Array.isArray(resp['warnings']) && resp['warnings'].length > 0) {
+					HTML.ShowToastMsg({
+						head: i18n('Boxes.CityMap.SubmitErrorHeader'),
+						text: resp['warnings'].join('<br>'),
+						type: 'warning',
+						hideAfter: 15000,
+					});
+				}
 			}
 			else {
 				HTML.ShowToastMsg({
 					head: i18n('Boxes.CityMap.SubmitErrorHeader'),
-					text: resp['msg'],
+					text: resp['msg'] || 'Unknown server error',
 					type: 'error',
 					hideAfter: 10000,
 				});
 			}
+		}, function(errMsg){
+			HTML.ShowToastMsg({
+				head: i18n('Boxes.CityMap.SubmitErrorHeader'),
+				text: errMsg,
+				type: 'error',
+				hideAfter: 10000,
+			});
 		});
 	},
 

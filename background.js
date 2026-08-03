@@ -1,7 +1,7 @@
 /*
  * *************************************************************************************
  *
- * Copyright (C) 2023 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -14,9 +14,11 @@
 
 'use strict';
 
-importScripts(
-	'vendor/browser-polyfill/browser-polyfill.min.js','vendor/dexie/dexie.min.js'
-)
+try {
+	importScripts('vendor/browser-polyfill/browser-polyfill.min.js','vendor/dexie/dexie.min.js')
+}
+catch {	
+}
 
 // @ts-ignore
 let alertsDB = new Dexie("Alerts");
@@ -88,6 +90,9 @@ alertsDB.version(1).stores({
 			if (typeof data.expires === 'string') data.expires = Number.parseInt(data.expires);
 			if (data.expires === undefined && typeof data.datetime === 'string') data.expires = new Date(data.datetime).getTime();
 			if (typeof data.repeat  === 'string') data.repeat  = Number.parseInt(data.repeat);
+			// game timestamps may carry fractional milliseconds (e.g. lockedUntil floats)
+			if (typeof data.expires === 'number') data.expires = Math.round(data.expires);
+			if (typeof data.repeat  === 'number') data.repeat  = Math.round(data.repeat);
 			if (data.category === undefined) data.category = '';
 			if (data.tag === undefined) data.tag = '';
 			if (data.vibrate === undefined) data.vibrate = false;
@@ -247,17 +252,20 @@ alertsDB.version(1).stores({
 		function triggerAlert(alert) {
 			return browser.notifications.create(
 				alert.id != null ? (prefix + alert.id) : previevId,
-				{
-					type: 'basic',
-					title: alert.data.title,
-					message: alert.data.body,
-					buttons: alert.data.actions,
-					requireInteraction: alert.data.persistent||false,
-					// @ts-ignore
-					contextMessage: 'FoE-Helper − '+trimPrefix(alert.server, "https://"),
-					iconUrl: '/images/app128.png',
-					eventTime: alert.data.expires
-				}
+				Object.assign(navigator.userAgent.indexOf("Firefox") > -1 ? {}: 
+					{
+						requireInteraction: alert.data.persistent||false,
+						buttons: alert.data.actions
+					}, {
+						type: 'basic',
+						title: alert.data.title,
+						message: alert.data.body,
+						iconUrl: '/images/app128.png',
+						eventTime: alert.data.expires,
+						contextMessage: 'FoE-Helper − '+trimPrefix(alert.server, "https://")
+						
+					}
+				)
 			);
 		}
 
@@ -368,9 +376,9 @@ alertsDB.version(1).stores({
 		// @ts-ignore
 		//const askText = ask[lng];
 		
-		if(!isDevMode() ) browser.tabs.create({
+		/*if(!isDevMode() ) browser.tabs.create({
 			url: `https://foe-helper.com/extension/update?lang=${lng}`
-		});
+		});*/
 	});
 
 
@@ -379,8 +387,7 @@ alertsDB.version(1).stores({
 	 *
 	 * @returns {boolean}
 	 */
-	function isDevMode()
-	{
+	function isDevMode() {
 		return !('update_url' in browser.runtime.getManifest());
 	}
 

@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -13,7 +13,7 @@
 
 FoEproxy.addHandler('IdleGameService', 'getState', (data, postData) => {
 	//Do not show window if deactivated in settings
-	if(!Settings.GetSetting('ShowEventChest')){
+	if(!Settings.GetSetting('ShowEventChest') || !(Settings.GetSetting('EventHelperIdle') === undefined ? true : Settings.GetSetting('EventHelperIdle'))) {
 		return;
 	}
 	idleGame.event = data.responseData.context;
@@ -107,11 +107,11 @@ FoEproxy.addRequestHandler('IdleGameService', 'performActions', (postData) => {
 		}
 
         if (data2.type === 'upgrade_level') {
-			idleGame.data[data2['characterId']].level += data2.amount;
+			idleGame.data[data2['characterId']].level += data2.amount || 1;
 		}
 
         if (data2.type === 'upgrade_manager') {
-			idleGame.data[data2['characterId']].manager += data2.amount;
+			idleGame.data[data2['characterId']].manager += data2.amount || 1;
 		}
 
 		if (data2.type === 'collect_task') {
@@ -134,6 +134,10 @@ FoEproxy.addMetaHandler('idle_game', (data, postData) => {
 
 
 let idleGame = {
+
+	finishTown: 8.4,
+	finishTownDegree: 5,
+	finishTownDiscount: 0,
 
 	data : {
 		workshop_1 : {level:0, manager:0, baseData: null, production:0, degree:0, next:0, need:0, ndegree:0, type: 'work'},
@@ -232,6 +236,11 @@ let idleGame = {
 			}
 			idleGame.Tasks[task['id']] = task;
 		}
+		
+		idleGame.finishTown = data.stageCostValue
+		idleGame.finishTownDegree = data.stageCostDegree
+		idleGame.finishTownDiscount = 1 - data.nextStageCostReductionPercentage/100
+
 	},
 
     /**
@@ -248,18 +257,20 @@ let idleGame = {
             auto_close: true,
             dragdrop: true,
             minimize: true,
-			resize : true
+			resize : true,
+			active_maps:"main",
         });
 
-        let htmltext = `<table id="idleGame_Table" style="width:100%"><tr><th colspan="2">`;
-        htmltext += `<img src="${srcLinks.get(idleGame.images[idleGame.event].idleCurrency, true)}" alt="" >`;
-        htmltext += `${i18n('Boxes.idleGame.Hourly')}</th></tr><tr>`;
-        htmltext += `<td>${idleGame.data.market_1.baseData.name}<br><span id="idleGame_Fest"></span></td>`;
-        htmltext += `<td rowspan="2">${idleGame.texts[idleGame.event].Production}<br><span id="idleGame_Work"></span></td>`;
-        htmltext += `</tr><tr><td>${idleGame.data.transport_1.baseData.name}<br><span id="idleGame_Ship"></span></td>`;
-        htmltext += `</tr><tr><td colspan="3" style="color: var(--text-bright);font-size:smaller">${i18n('Boxes.idleGame.Warning')}</td></tr></table>`;
+        let htmltext = `<table id="idleGame_Table" style="width:100%"><thead><tr><th colspan="2">`;
+        htmltext += `<img src="${srcLinks.get(idleGame.images[idleGame.event].idleCurrency, true)}" alt="" > `;
+        htmltext += `${i18n('Boxes.idleGame.Hourly')}</th></tr></thead><tr>`;
+        htmltext += `<td colspan="2"><div class="flex"><div><p>${idleGame.data.market_1.baseData.name}<br><span id="idleGame_Fest"></span></p>`;
+        htmltext += `${idleGame.data.transport_1.baseData.name}<br><span id="idleGame_Ship"></span></div>`;
+        htmltext += `<div>${idleGame.texts[idleGame.event].Production}<br><span id="idleGame_Work"></span></div></div></td>`;
+        htmltext += `</tr><tr class="town_info"><td><div class="idleGame_Town"></div></td>`
+		htmltext += `<td data-original-title="${i18n('Boxes.idleGame.Warning')}">${i18n('General.Disclaimer')}</td></tr></table>`;
         
-		htmltext += `<table id="idleGame_Next" class="foe-table" style="width:100%"><tr><th colspan="4"  onclick="idleGame.hide('#idleGame_Next')">${i18n('Boxes.idleGame.BuildingUpgrades')}<i></i></tr>`;
+		htmltext += `<table id="idleGame_Next" class="foe-table" style="width:100%"><tr><th colspan="4" onclick="idleGame.hide('#idleGame_Next')">${i18n('Boxes.idleGame.BuildingUpgrades')}<i></i></tr>`;
 		htmltext += `<tr>`;
         htmltext += `<td><img data-original-title="${idleGame.data.workshop_1.baseData.name}" src="${srcLinks.get(idleGame.images[idleGame.event].workshop_1, true)}" alt="" ></td>`;
         htmltext += `<td><span id="idleGame_workshop_1Level" class="levelSelect" data-station="workshop_1"></span></td>`;
@@ -297,9 +308,9 @@ let idleGame = {
 		htmltext += `<td class="align-right"><span id="idleGame_market_1Time"></span></td></tr>`;
         htmltext += `</table>`;
         htmltext += `<table id="idleGame_TasksActive" class="foe-table" style="width:100%"><tr><th colspan="2" onclick="idleGame.hide('#idleGame_TasksActive')">${i18n('Boxes.idleGame.ActiveTasks')}<i></i></th></tr>`;
-		htmltext += `<tr><td class="align-left" id="idleGame_Task0"></td><td><span id="time0"></span></td></tr>`;
-        htmltext += `<tr><td class="align-left" id="idleGame_Task1"></td><td><span id="time1"></span></td></tr>`;
-        htmltext += `<tr><td class="align-left" id="idleGame_Task2"></td><td><span id="time2"></span></td></tr>`;
+		htmltext += `<tr><td class="align-left" id="idleGame_Task0"></td><td id="time0"></td></tr>`;
+        htmltext += `<tr><td class="align-left" id="idleGame_Task1"></td><td id="time1"></td></tr>`;
+        htmltext += `<tr><td class="align-left" id="idleGame_Task2"></td><td id="time2"></td></tr>`;
         htmltext += `</table>`;
 		htmltext += `<table id="idleGame_Tasks" class="foe-table" style="width:100%"><tr><th onclick="idleGame.hide('#idleGame_Tasks')">${i18n('Boxes.idleGame.UpcomingTasks')}<i></i></th></tr>`;
 		htmltext += `<tr><td id="idleGame_Task3"></td></tr>`;
@@ -310,7 +321,7 @@ let idleGame = {
         htmltext += `<tr><td id="idleGame_Task8"></td></tr>`;
         htmltext += `</table>`;
 		htmltext += `<table id="idleGame_Strategy" class="foe-table" style="width:100%"><tr>`;
-		htmltext += `<th style="width:25px" onclick="idleGame.modifyStrategy()">✏️</th>`;
+		htmltext += `<th class="clickable" style="width:25px" onclick="idleGame.modifyStrategy()">✏️</th>`;
 		htmltext += `<th colspan="2" onclick="idleGame.hide('#idleGame_Strategy')"><span style="margin-right:25px">${i18n('Boxes.idleGame.Strategy')}</span><i></i></th></tr>`;
 		htmltext += `<tr><td colspan="2" id="idleGame_StratPrev"></td><td style="width:25px" id="idleGame_StratUndo" onclick="idleGame.StratUndo()"></td></tr>`;
         htmltext += `<tr><td colspan="2" id="idleGame_Strat"></td><td id="idleGame_StratCheck" onclick="idleGame.StratCheck()"></td></tr>`;
@@ -320,8 +331,6 @@ let idleGame = {
         
         
         $('#idleGameDialogBody').html(htmltext);
-
-		$('#idleGameDialogBody img, #idleGameDialogBody span').tooltip();
 
 		for (let t of idleGame.settings.hiddenTables) {
 			$(t).toggleClass("hide");
@@ -362,12 +371,14 @@ let idleGame = {
     },
 
 	updateTarget: (event) => {
+		if (event.key != 'Enter' && event.key != 'Escape') return;
+
+		
 		if (event.key === 'Enter') {
-			idleGame.settings.targets[event.srcElement.dataset.station] = Number(event.srcElement.value);
+			idleGame.settings.targets[event.srcElement.dataset.station] = Math.max(Math.floor(Math.min(Number(event.srcElement.value),999)||0,0));
 			idleGame.saveSettings();
 		}
 
-		if (event.key != 'Enter' && event.key != 'Escape') return;
 		$('#'+event.srcElement.dataset.replace)[0].style.display = "block";
 		event.srcElement.setAttribute("onfocusout", "");
 		event.srcElement.remove();
@@ -377,7 +388,7 @@ let idleGame = {
 
 	removeInput: (event) => {
 		
-		idleGame.settings.targets[event.srcElement.dataset.station] = Number(event.srcElement.value);
+		idleGame.settings.targets[event.srcElement.dataset.station] = Math.max(Math.floor(Math.min(Number(event.srcElement.value),999)||0,0));
 		idleGame.saveSettings();
 		
 		$('#'+event.srcElement.dataset.replace)[0].style.display = "block";
@@ -444,13 +455,8 @@ let idleGame = {
 		for (let x in idleGame.data) {
 			if (!Object.hasOwnProperty.call(idleGame.data, x)) continue;
 			$('#idleGame_'+x+'Level').text(`${idleGame.data[x].level} → ${idleGame.data[x].next}`);
-			$('#idleGame_'+x).text(`${idleGame.bigNum(idleGame.data[x].need)} ${idleGame.iGNums[idleGame.data[x].ndegree]}`);
-			$('#idleGame_'+x+'Time').html(`${idleGame.time(idleGame.data[x].need,idleGame.data[x].ndegree,sum,degree,0,0)}`);
-			if (degree<festd || (festd==degree && sum < fest) ) {
-				$('#idleGame_'+x+'Time').attr("data-original-title", `${idleGame.time(idleGame.data[x].need,idleGame.data[x].ndegree,fest,festd,0,0,true)}`);
-			} else {
-				$('#idleGame_'+x+'Time').attr("data-original-title", ``);
-			}
+			$('#idleGame_'+x).text(`${idleGame.bigNum(idleGame.data[x].need)}${idleGame.iGNums[idleGame.data[x].ndegree]}`);
+			$('#idleGame_'+x+'Time').html(`${idleGame.time(idleGame.data[x].need,idleGame.data[x].ndegree,sum,degree,0,0,fest,festd)}`);
 			$('#idleGame_'+x).attr('data-original-title', `${idleGame.bigNum(idleGame.data[x].need)} ${idleGame.iGNumTitles[idleGame.data[x].ndegree]}`);
 		
 		}
@@ -497,7 +503,8 @@ let idleGame = {
 												targetProduction,
 												targetDegree,
 												idleGame.Taskprogress[idleGame.Tasklist[t]]?.value || 0,
-												idleGame.Taskprogress[idleGame.Tasklist[t]]?.degree || 0)}`);
+												idleGame.Taskprogress[idleGame.Tasklist[t]]?.degree || 0,
+												0,0)}`);
 			$('#time'+ t).removeClass('hide');
 			
 			
@@ -520,10 +527,36 @@ let idleGame = {
 		idleGame.DisplayStrat(idleGame.checkStrat());
 		
 		const text_currentrun = `${i18n('Boxes.idleGame.CurrentRun')}: ${idleGame.Stage} / ${i18n('Boxes.idleGame.Variant')}: ${idleGame.Variant}`;
-		const text_nexttown = (idleGame.Stage === 1) ? `${i18n('Boxes.idleGame.NextTown')} 1 M: ${idleGame.time(1,2,sum,degree,idleGame.Progress,idleGame.ProgressDegree)}` :
-		  `${i18n('Boxes.idleGame.NextTown')} 8.4 Q: ${idleGame.time(8.4,5,sum,degree,idleGame.Progress,idleGame.ProgressDegree)}<br/>` +
-		  `6.3 Q: ${idleGame.time(6.3,5,sum,degree,idleGame.Progress,idleGame.ProgressDegree)}`;
+		let text_currentrun_short = `${idleGame.Stage}/${idleGame.Variant}`;
+		let Tt = idleGame.finishTown
+		let Td = idleGame.finishTownDegree
+		
+		if (idleGame.Stage === 1) {
+			Tt = 1
+			Td = 2
+		}
+
+		let text_nexttown = `${i18n('Boxes.idleGame.NextTown')} ${Tt} ${idleGame.iGNums[Td]}: `
+		text_nexttown += `${idleGame.time(Tt,Td,sum,degree,idleGame.Progress,idleGame.ProgressDegree,fest,festd)}<br/>`
+		let discounted = Math.round(idleGame.finishTownDiscount * Tt * 100) / 100
+		text_nexttown += `${discounted} ${idleGame.iGNums[Td]}: `
+		text_nexttown += `${idleGame.time(discounted,Td,sum,degree,idleGame.Progress,idleGame.ProgressDegree,fest,festd)}`;
+		
+		
 		$('#idleGame_Town').html(`${text_currentrun}<br/>${text_nexttown}`);
+
+		text_nexttown = `${Tt}${idleGame.iGNums[Td]}: `
+		text_nexttown += `${idleGame.time(Tt,Td,sum,degree,idleGame.Progress,idleGame.ProgressDegree,fest,festd)}`
+		discounted = Math.round(idleGame.finishTownDiscount * Tt * 100) / 100;
+		let discounted_time = idleGame.time(discounted,Td,sum,degree,idleGame.Progress,idleGame.ProgressDegree,fest,festd);
+		if (!discounted_time.includes("999")) {
+			text_nexttown += `, ${discounted}${idleGame.iGNums[Td]}: `
+			text_nexttown += `${discounted_time}`;
+		}
+		
+		$('.idleGame_Town').html(`<span data-original-title="${text_currentrun}">${text_currentrun_short}</span> &middot; ${text_nexttown}`);
+
+		$('#idleGameDialogBody [data-original-title]').tooltip();
 
 	},
 
@@ -643,18 +676,26 @@ let idleGame = {
 	},
 
 	
-	time: (amount, da, hourly, dh, stock, ds,title=false) => {
+	time: (amount, da, hourly, dh, stock, ds, fest, df) => {
 		
-		stock = stock * Math.pow(1000, ds - da);
-		let diff = amount - stock;
-		if (diff <= 0) return "0h:0m";
-		let minutes = Math.ceil(diff / hourly * Math.pow(1000,da-dh) * 60)
-		let hours = Math.floor(minutes / 60)
-		minutes -= hours*60;
-		time = hours >= 1000 ? `>999h` : `${hours}h`
-		time += hours < 24 ? `:${minutes}m` : ``
-		time += (hours < 24 && !title) ? ` <img data-original-title="${i18n("Boxes.idleGame.SetTimer")}" src="${srcLinks.get("/shared/gui/plus_offer/plus_offer_time.png", true)}" alt="" onclick="idleGame.addAlert(${hours},${minutes})">` : ``
-		time += title ? i18n("Boxes.idleGame.noBottleneck"):'';
+		let t = (amount, da, hourly, dh, stock, ds) => {
+			stock = stock * Math.pow(1000, ds - da);
+			let diff = amount - stock;
+			if (diff <= 0) return {h:0,m:0};
+			let total = Math.ceil(diff / hourly * Math.pow(1000,da-dh) * 60)
+			let hours = Math.floor(total / 60)
+			let minutes = total-hours*60;
+			return {h:hours,m:minutes,t:total}
+		}
+		let tf = (time)=> {
+			return time.h >= 1000 ? `>999h` : `${time.h}h` + (time.h < 24 ? `:${time.m}m` : ``)
+		}
+		
+		let t0 = t(amount, da, hourly, dh, stock, ds)
+		let tNB = t(amount, da, fest, df, stock, ds)
+		
+		let time = `<span ${(t0.t > tNB.t) ? 'data-original-title="' + tf(tNB)+'<br>' + i18n("Boxes.idleGame.noBottleneck")+'"':''}>${tf(t0)}</span>`		
+		time += (t0.h < 24) ? ` <img class="clickable" data-original-title="${i18n("Boxes.idleGame.SetTimer")}" src="${srcLinks.get("/shared/gui/plus_offer/plus_offer_time.png", true)}" alt="" onclick="idleGame.addAlert(${t0.h},${t0.m})">` : ``
 		return time;
 	},
 
@@ -790,7 +831,7 @@ let idleGame = {
 				resize : true
 			});
 		}
-		let h = `<textarea id="idleGameStratText">${list}</textarea><button id="idleGameStratSave" class="btn-default" onclick="idleGame.saveStrategy()">${i18n('General.Save')}</button>`;
+		let h = `<textarea id="idleGameStratText">${list}</textarea><button id="idleGameStratSave" class="btn" onclick="idleGame.saveStrategy()">${i18n('General.Save')}</button>`;
 		$('#idleGameStrategyDialogBody').html(h)
 	},
 

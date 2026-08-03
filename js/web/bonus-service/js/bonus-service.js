@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -43,11 +43,8 @@ FoEproxy.addHandler('BonusService', 'getLimitedBonuses', (data, postData) => {
 });
 
 FoEproxy.addFoeHelperHandler('QuestsUpdated', data => {
-	if ($('#bonus-hud').length > 0) {
+	if ($('#bonus-hud').length == 0) return;
 		BonusService.CalcBonusData();
-	} else if (Settings.GetSetting('RivalSound')) {
-		BonusService.checkRivalComplete();
-	}
 });
 
 // Guildfights enter
@@ -278,18 +275,9 @@ let BonusService = {
 		for (let i = 0; i < MainParser.Quests.length; i++) {
 			let Quest = MainParser.Quests[i];
 			if (Quest['category'] === 'outpost') continue;
+			if (Quest['type'] === 'ReplayableSeason_Allies_Milestone') continue;
 			if (Quest['state'] === 'collectReward') Ret += 1;
 		}
 		return Ret;
-    },
-
-	checkRivalComplete: () => {
-		if (!MainParser.Quests) return; 
-		for (let Quest of MainParser.Quests) {
-			if (Quest?.questGiver?.id.indexOf("rival") >=0 && Quest.state == 'collectReward') {
-				helper.sounds.play("message");
-				break;
-			}
-		}
-	}
+    }
 }

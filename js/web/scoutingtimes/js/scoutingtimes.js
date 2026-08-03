@@ -1,7 +1,7 @@
 
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -22,12 +22,9 @@ FoEproxy.addMetaHandler('castle_system_levels', (data, postData) => {
     let resp = JSON.parse(data['response']);
     let castlebonus = 1;
         
-    for (let l of resp)
-	{
-        if(!l['level'])
-		{
+    for (let l of resp) {
+        if(!l['level']) 
 			continue;
-		}
 
         for (let boost of l.permanentRewards.BronzeAge) {
             if(boost.subType !== 'army_scout_time')
@@ -46,10 +43,12 @@ FoEproxy.addHandler('CampaignService', 'start', (data, postData) => {
     if (!Settings.GetSetting('ShowScoutingTimes')) {
         return;
     }
-    
+    maxShip = Math.floor(Object.values(data.responseData.provinces).map(x=>x.id||0).pop()/100)
     for (let province of data.responseData.provinces) {
-        scoutingTimes.Provinces[province.id] = province;
+        if (province.provinceType=="ship") province.parentIds=province.parentIds.concat([...Array(maxShip - province.id/100).keys()].map(x=>(x+province.id/100+1)*100))
+        scoutingTimes.Provinces[province.id||0] = province;
     }
+    
     scoutingTimes.scoutPosition = data.responseData.scout?.current_province|0;
     scoutingTimes.scoutTarget = data.responseData.scout?.path[data.responseData.scout?.path?.length-1]|0;
     scoutingTimes.scoutTraveltime = data.responseData.scout.time_to_target;
@@ -273,7 +272,7 @@ let scoutingTimes = {
     },
 
     CheckSectors: (data) => {
-            // Is the box enabled in the settings?
+        // Is the box enabled in the settings?
         if (!Settings.GetSetting('ShowScoutingTimes')) {
             return;
         }
@@ -291,25 +290,18 @@ let scoutingTimes = {
         scoutingTimes.Provinces[Id].isPlayerOwned = true;
 
         return scoutingTimes.ShowDialog();
-
     },
     
-    /**
-    *
-    */
      ShowSettings: () => {
 		let autoOpen = Settings.GetSetting('ShowScoutingTimes');
 
         let h = [];
         h.push(`<p><label><input id="autoStartScout" type="checkbox" ${(autoOpen === true) ? ' checked="checked"' : ''} />${i18n('Boxes.Settings.Autostart')}</label></p>`);
-        h.push(`<p><button onclick="scoutingTimes.SaveSettings()" id="save-bghelper-settings" class="btn btn-default" style="width:100%">${i18n('Boxes.Settings.Save')}</button></p>`);
+        h.push(`<p><button onclick="scoutingTimes.SaveSettings()" id="save-bghelper-settings" class="btn" style="width:100%">${i18n('Boxes.Settings.Save')}</button></p>`);
 
         $('#mapScoutingTimesDialogSettingsBox').html(h.join(''));
     },
 
-    /**
-    *
-    */
     SaveSettings: () => {
         let value = false;
 		if ($("#autoStartScout").is(':checked'))

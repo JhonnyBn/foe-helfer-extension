@@ -1,7 +1,7 @@
 /*
  * *************************************************************************************
  *
- * Copyright (C) 2024 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -43,6 +43,7 @@ let Market = {
     MinQuantity: 1,
     MaxResults: 100,
     OnlyAffordable: false,
+    NeededForResearch: false,
 
     TradePartnerNeighbor: true,
     TradePartnerGuild: true,
@@ -165,6 +166,11 @@ let Market = {
                 Market.OnlyAffordable = !Market.OnlyAffordable;
                 Market.CalcBody();
             });
+
+            $('#Market').on('change', '.neededforresearch', function () {
+                Market.NeededForResearch = !Market.NeededForResearch;
+                Market.CalcBody();
+            });
         }
         else if (event) {
             Market.CalcBody();
@@ -184,10 +190,17 @@ let Market = {
     CalcBody: () => {
         let h = [];
 
+        // Cache für die Forschungsbedarfs-Güter; wird in TestFilter ausgewertet.
+        Market._NeededResearchGoodsCache = Market.NeededForResearch
+            ? Technologies.GetNeededResearchGoods()
+            : null;
+
         // Filters
         h.push('<div class="dark-bg" style="margin-bottom: 3px;">');
+        h.push('<div style="float:right" class="text-right p5"><span class="btn" onclick="MarketOffers.Show(false)">'+i18n('Boxes.MarketOffers.Title')+'</span><br>');
+        h.push('<span class="btn my-5" onclick="MarketOffers.ShowEvents(false)">'+i18n('Boxes.MarketOffers.Events') +'</span></div>');
         h.push('<table class="filters">');
-        h.push('<thead>');
+        h.push('<thead class="sticky">');
         h.push('<tr>');
         h.push('<th colspan="2"></td>');
         h.push('<th class="text-left">' + i18n('Boxes.Market.TradePartner') + '</th>');
@@ -301,9 +314,7 @@ let Market = {
 
         h.push('<tr>');
         h.push('<td colspan="2"><label class="game-cursor"><input class="onlyaffordable game-cursor" ' + (Market.OnlyAffordable ? 'checked' : '') + ' type="checkbox">' + i18n('Boxes.Market.OnlyAffordable') + '</label></td>');
-        h.push('<td></td>');
-        h.push('<td></td>');
-        h.push('<td></td>');
+        h.push('<td colspan="3"><label class="game-cursor"><input class="neededforresearch game-cursor" ' + (Market.NeededForResearch ? 'checked' : '') + ' type="checkbox" title="' + HTML.i18nTooltip(i18n('Boxes.Market.NeededForResearchTT')) + '">' + i18n('Boxes.Market.NeededForResearch') + '</label></td>');
         h.push('</tr>');
 
         h.push('</table>');
@@ -312,7 +323,7 @@ let Market = {
         // Table
         h.push('<table class="foe-table exportable">');
 
-        h.push('<thead>');
+        h.push('<thead class="sticky">');
         h.push('<tr>');
         h.push('<th data-export2="Offered goods" data-export3="Offered amount" colspan="3">' + i18n('Boxes.Market.OfferColumn') + '</th>');
         h.push('<th data-export2="Requested goods" data-export3="Requested amount" colspan="3">' + i18n('Boxes.Market.NeedColumn') + '</th>');
@@ -340,10 +351,10 @@ let Market = {
                     CurrentPos = (Trade['merchant']['is_self'] ? OwnPos : Pos);
 
                 h.push('<tr>');
-                h.push('<td class="goods-image"><span class="goods-sprite-50 sm ' + GoodsData[OfferGoodID]['id'] +'"></span></td>');
+                h.push('<td class="goods-image"><span class="goods-sprite sprite-35 ' + GoodsData[OfferGoodID]['id'] +'"></span></td>');
                 h.push('<td><strong class="td-tooltip" title="' + HTML.i18nTooltip(OfferTT) + '">' + GoodsData[OfferGoodID]['name'] + '</strong></td>');
                 h.push('<td><strong class="td-tooltip" title="' + HTML.i18nTooltip(OfferTT) + '">' + Trade['offer']['value'] + '</strong></td>');
-                h.push('<td class="goods-image"><span class="goods-sprite-50 sm ' + GoodsData[NeedGoodID]['id'] +'"></span></td>');
+                h.push('<td class="goods-image"><span class="goods-sprite sprite-35 ' + GoodsData[NeedGoodID]['id'] +'"></span></td>');
                 h.push('<td><strong class="td-tooltip" title="' + HTML.i18nTooltip(NeedTT) + '">' + GoodsData[NeedGoodID]['name'] + '</strong></td>');
                 h.push('<td><strong class="td-tooltip" title="' + HTML.i18nTooltip(NeedTT) + '">' + Trade['need']['value'] + '</strong></td>');
                 h.push('<td class="text-center">' + HTML.Format(MainParser.round(Trade['offer']['value'] / Trade['need']['value'] * 100) / 100) + '</td>');
@@ -411,6 +422,12 @@ let Market = {
 
         // only Affordable
         if (Market.OnlyAffordable && Trade.need.value > (ResourceStock[Trade.need.good_id] || 0)) {
+            return false;
+        }
+
+        // nur Angebote, deren angebotenes Gut für die Forschung (gemäß
+        // Technologies-Ansicht) noch benötigt wird
+        if (Market._NeededResearchGoodsCache && !Market._NeededResearchGoodsCache.has(Trade['offer']['good_id'])) {
             return false;
         }
 
@@ -514,11 +531,11 @@ let Market = {
 		let autoOpen = Settings.GetSetting('ShowMarketFilter');
 
         let h = [];
-        h.push(`<p class="text-center"><button class="btn btn-default" onclick="HTML.ExportTable($('#MarketBody').find('.foe-table.exportable'), 'csv', 'Market')">${i18n('Boxes.General.ExportCSV')}</button><br>`);
-        h.push(`<button class="btn btn-default" onclick="HTML.ExportTable($('#MarketBody').find('.foe-table.exportable'), 'json', 'Market')">${i18n('Boxes.General.ExportJSON')}</button></p>`);
+        h.push(`${i18n('Boxes.General.Export')}: <span class="btn-group"><button class="btn" onclick="HTML.ExportTable($('#MarketBody').find('.foe-table.exportable'), 'csv', 'Market')">CSV</button>`);
+        h.push(`<button class="btn" onclick="HTML.ExportTable($('#MarketBody').find('.foe-table.exportable'), 'json', 'Market')">JSON</button></span>`);
         h.push(`<p><input id="autoStartMarket" name="autoStartMarket" value="1" type="checkbox" ${(autoOpen === true) ? ' checked="checked"' : ''} /> <label for="autoStartMarket">${i18n('Boxes.Market.Settings.Autostart')}</label></p>`);
 
-        h.push(`<p><button onclick="Market.SaveSettings()" id="save-market-settings" class="btn btn-default" style="width:100%">${i18n('Boxes.Settings.Save')}</button></p>`);
+        h.push(`<p><button onclick="Market.SaveSettings()" id="save-market-settings" class="btn" style="width:100%">${i18n('Boxes.Settings.Save')}</button></p>`);
 
         $('#MarketSettingsBox').html(h.join(''));
     },

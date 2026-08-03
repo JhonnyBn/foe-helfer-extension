@@ -21,7 +21,8 @@ const PvPArena = {
                 minimize: true,
                 dragdrop: true,
                 resize: true,
-                settings: 'PvPArena.ShowSettings()'
+                settings: 'PvPArena.ShowSettings()',
+			    active_maps:"main"
             });
 
             // CSS in den DOM
@@ -41,7 +42,7 @@ const PvPArena = {
     },
 
     /**
-    * Body der Box aktualisieren falls bereits geöffnet
+    * Body der Box aktualisieren falls bereits geï¿½ffnet
     */
     RefreshBox: () => {
         if ($('#PvPArena').length > 0) {
@@ -138,7 +139,7 @@ const PvPArena = {
         let h = [];
         h.push(`<p><input id="autoStartPvPArena" name="autoStartPvPArena" value="1" type="checkbox" ${autoOpen === true ? ' checked="checked"' : ''} />`
             + ` <label for="autoStartPvPArena">${i18n('Boxes.Settings.Autostart')}</label>`);
-        h.push(`<p><button onclick="PvPArena.SaveSettings()" id="savePvPArenaSettings" class="btn btn-default" style="width:100%">${i18n('Boxes.Settings.Save')}</button></p>`);
+        h.push(`<p><button onclick="PvPArena.SaveSettings()" id="savePvPArenaSettings" class="btn" style="width:100%">${i18n('Boxes.Settings.Save')}</button></p>`);
 
         $('#PvPArenaSettingsBox').html(h.join(''));
     },

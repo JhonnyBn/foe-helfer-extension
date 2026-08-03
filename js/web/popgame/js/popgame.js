@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -13,7 +13,7 @@
 
 FoEproxy.addHandler('PopGameService', 'getOverview', (data, postData) => {
     //Start Minigame
-    if(!Settings.GetSetting('ShowEventChest')) return;
+    if(!Settings.GetSetting('ShowEventChest') || !(Settings.GetSetting('EventHelperPop') === undefined ? true : Settings.GetSetting('EventHelperPop'))) return;
     if (!data?.responseData?.currentGame?.config?.height) return;
     if (!data?.responseData?.currentGame?.config?.width) return;
     if (!data?.responseData?.currentGame?.tiles) return;
@@ -56,25 +56,12 @@ FoEproxy.addHandler('RewardService', 'collectReward', (data, postData) => {
     
 });
 
-$('#container').on("click", function (e) {
-    if ($('#Popgame').length === 0) return;
-    if (Popgame.rewardactive==0) return;
-    
-    let X=e.clientX,
-        Y=e.clientY,
-        Xc = window.innerWidth/2,
-        Yc = window.innerHeight/2;
-    
-    if (X>Xc-313 && X<Xc+290 && Y<Yc+297 && Y>Yc-324 && (X<Xc-56 || X>Xc+73 || Y<Yc+151 ||Y>Yc+172)) return;
-    
-    if (Popgame.rewardactive > 0) Popgame.rewardactive -= 1;
-    if ($('#Popgame.closed').length === 0) return;
-    if (Popgame.rewardactive!==0) return;
-    if (Popgame.minimized) return;
-    $('#Popgame').addClass("open");
-    $('#Popgame').removeClass("closed");
-});
-
+mouseActions.addAction([[-57, 151, 'Center'],[72, 173, 'Center']],()=>{
+    Popgame.clearReward()
+})  
+mouseActions.addAction([[284, 297, 'Center'],[-312, -337, 'Center'],false],()=>{
+    Popgame.clearReward()
+})
 
 FoEproxy.addHandler('PopGameService', 'popTile', (data, postData) => {
     if ($('#Popgame').length === 0) return;
@@ -161,7 +148,8 @@ let Popgame = {
                 'title': 'Popgame preview',//i18n('Boxes.Popgame.Title'),
                 'auto_close': true,
                 'minimize': true,
-                'dragdrop': false
+                'dragdrop': false,
+			    active_maps:"main"
             });
             let body='<div style="background:#553815">';
             body+=`<div id="PGwarning">${i18n("Boxes.Popgame.Warning")}</div>`;
@@ -281,20 +269,14 @@ let Popgame = {
 
     hideDrops: () => {
         if ($('#Popgame').length === 0) return
-        let c=0;
-        let drops = $('.PGdroppable');
-        h=$('#Popgame')[0].clientHeight;
-        if (drops.length >0) {
-            for (let drop of drops) {
-                if((h - drop.offsetTop) < 155 && (h - drop.offsetTop) > 145) {
-                    c+=1;
-                    $(`#${drop.id}`).fadeOut('fast');
-                };
-            }
-        }
-
-        if (c>0) setTimeout(Popgame.hideDrops,250);
-    },
+        let drops = $(".PGcolumn").map(function() {
+            var last = $(this).find(".PGcell:visible").last();
+            return last.hasClass("PGdroppable") ? last[0] : null;
+        });
+        drops.fadeOut('fast');
+        if (drops.length > 0) 
+            setTimeout(Popgame.hideDrops,250);
+        },
 
     resetTempChest: () => {
         if (Popgame.tempC !== null) {
@@ -315,6 +297,18 @@ let Popgame = {
             Popgame.grid[x][y] = tile.type + ((tile.popType === "default" || tile.type === "grandPrize") ? "" : "_reward");
         }
     },
+    clearReward:()=>{
+        if ($('#Popgame').length === 0) return;
+        if (Popgame.rewardactive==0) return;
+        
+        if (Popgame.rewardactive > 0) Popgame.rewardactive -= 1;
+        if ($('#Popgame.closed').length === 0) return;
+        if (Popgame.rewardactive!==0) return;
+        if (Popgame.minimized) return;
+        $('#Popgame').addClass("open");
+        $('#Popgame').removeClass("closed");
+    },
+
     tracking: null,
     trackingReset:()=>{
         Popgame.tracking = {start:{total:0,grandPrize:0},afterPop:{total:0,grandPrize:0},leftOnBoard:{grandPrize:0}};
@@ -377,6 +371,8 @@ FoEproxy.addHandler('PopGameService', 'useBooster', (data, postData) => {
 });
 
 FoEproxy.addHandler('PopGameService', 'endGame', (data, postData) => {
+    if(!Settings.GetSetting('ShowEventChest') || !(Settings.GetSetting('EventHelperPop') === undefined ? true : Settings.GetSetting('EventHelperPop'))) return;
+
     let x = Popgame.grid.reduce((a,b) => [...a,...b]);
     for (let c of x) {
         Popgame.tracking.afterPop.total++;

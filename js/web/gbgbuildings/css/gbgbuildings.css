@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -11,24 +11,19 @@
  * **************************************************************************************
  */
 
-
 #GBGBuildings {
 	width: 420px;
 	height: 400px;
 }
-
 #GBGBuildingsBody {
 	overflow-y: auto;
 }
-
 #GBGBuildingsBody th, #GBGBuildingsBody td {
 	text-align: center;
-	&:first-child {
-		text-align: left;
-	}
 }
-
-
+#GBGBuildingsBody th:first-child, #GBGBuildingsBody td:first-child {
+	text-align: left;
+}
 #GBGBuildingsBody .building {
 	width: 65px;
 }
@@ -37,9 +32,9 @@
 }
 #GBGBuildingsBody .highlight {
 	font-weight: 800;
-	color: var(--text-bright);
+	color: var(--sunflower);
 }
 #GBGBuildingsBody .breakline td {
-	border-top: 2px solid var(--text-bright);
+	border-top: 2px solid var(--sunflower);
 }
 

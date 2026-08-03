@@ -1,7 +1,7 @@
 /*
  * *************************************************************************************
  *
- * Copyright (C) 2023 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -22,22 +22,23 @@ FoEproxy.addHandler('TimedSpecialRewardService', 'getTimedSpecial', (data, postD
 	}
 });
 
-// - QI 
+// - QI
 FoEproxy.addHandler('RewardService', 'collectRewardSet', (data, postData) => {
 	const d = data.responseData;
-	let event = null, 
-		notes = null;
 
-	if (d.context.toLowerCase().includes("guild_raids")) {
-		event = d.context.toLowerCase()
-	}
+	// since game 1.340 the response does not always carry a context field
+	const rewards = d?.reward?.rewards;
+	if (!Array.isArray(rewards)) return;
 
-	for (const reward of d.reward.rewards) {
+	const context = d.context?.toLowerCase() ?? '';
+	const event = context.includes('guild_raids') ? context : null;
+
+	for (const reward of rewards) {
 		if (reward.subType !== 'strategy_points') continue;
 
 		StrategyPoints.insertIntoDB({
 			event: event,
-			notes: notes ? notes : '',
+			notes: '',
 			amount: reward.amount,
 			date: moment(MainParser.getCurrentDate()).format('YYYY-MM-DD')
 		});
@@ -117,7 +118,7 @@ FoEproxy.addHandler('RewardService', 'collectReward', (data, postData) => {
 	else if (event === 'default') {	// default is hiddenreward or leaguereward or flying island incidents
 		event = 'hiddenReward';
 
-		if (isCurrentlyInOutpost === 1) {
+		if (ActiveMap == 'cultural_outpost') {
 			event = 'shards';
 		}
 		if (postData[0].requestMethod === 'useItem') {
@@ -186,7 +187,7 @@ FoEproxy.addHandler('GuildExpeditionService', 'openChest', (data, postData) => {
 });
 
 
-// Visit other players (satDown)
+// Visit taverns (satDown)
 FoEproxy.addHandler('FriendsTavernService', 'getOtherTavern', (data, postData) => {
 	const d = data['responseData'];
 
@@ -276,17 +277,19 @@ FoEproxy.addHandler('CityMapService', 'showAppliedBonus', (data, postData) => {
 		if (BonusId !== data['responseData']['bonus'][j]) continue;
 
 		let CityMapID = data['responseData']['entityId'],
-		Building = MainParser.CityMapData[CityMapID],
-		CityEntity = MainParser.CityEntities[Building['cityentity_id']];
+		buildingData = MainParser.CityMapData[CityMapID],
+		metaData = MainParser.CityEntities[buildingData.cityentity_id],
+		era = Technologies.getEraName(buildingData.cityentity_id, buildingData.level)
 
-		let Production = Productions.readType(Building);
-		let FP = Production?.products?.strategy_points;
+		let building = CityBuildings.createBuilding(metaData, era, buildingData)
+		let FPproduction = parseFloat(Productions.getBuildingProductionByCategory(true, building, 'strategy_points').amount) 
+		let FP = FPproduction + Math.round(FPproduction * ((Boosts.Sums.forge_points_production) / 100))
 
 		if (!FP) continue;
 
 		StrategyPoints.insertIntoDB({
 			event: 'double_collection',
-			notes: CityEntity['name'],
+			notes: building.name,
 			amount: FP,
 			date: moment(MainParser.getCurrentDate()).format('YYYY-MM-DD')
 		});
@@ -385,9 +388,9 @@ let FPCollector = {
 			}
 
 			$('#fp-collectorBody').append(
-				`<div class="dark-bg head">
+				`<div class="dark-bg head sticky">
 					<div class="text-warning"><strong>${i18n('Boxes.FPCollector.Total')} <span id="fp-collector-total-fp"></span>${i18n('Boxes.FPCollector.FP')}</strong></div>
-					<div class="text-right"><button class="btn btn-default btn-tight" id="FPCollectorPicker">${FPCollector.formatRange()}</button></div>
+					<div class="text-right"><button class="btn btn-slim" id="FPCollectorPicker">${FPCollector.formatRange()}</button></div>
 				</div>`,
 				`<div id="fp-collectorBodyInner"></div>`
 			);

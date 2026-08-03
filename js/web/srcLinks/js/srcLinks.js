@@ -1,7 +1,7 @@
 /*
  * *************************************************************************************
  *
- * Copyright (C) 2024 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -17,9 +17,6 @@ let srcLinks = {
     raw:null,
 
     init: async () => {
-        //clear storage - can be removed down the line
-        localStorage.removeItem('PortraitsFileList')
-
         // wait for ForgeHX is loaded, then read the full script url
         const isElementLoaded = async name => {
             while ( document.querySelector('script[src*="' + name + '"]') === null) {
@@ -41,10 +38,12 @@ let srcLinks = {
         xhr.send();
     },
 
+
     readHX: () => {
         let HXscript = srcLinks.raw+"";
         let startString = "baseUrl,";
         let start = HXscript.indexOf(startString) + startString.length;
+
         HXscript = HXscript.substring(start);
 
         let end = HXscript.indexOf("}")+1;
@@ -53,27 +52,29 @@ let srcLinks = {
         try {
             srcLinks.FileList = JSON.parse(HXscript);
 
-            // ExtPlayerId is not available on this point
-            let c = localStorage.getItem('current_player_id');
+            const lastSent = localStorage.getItem('sendListLastDate');
+            const now = Date.now();
+            const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000; // 7 Tage Cooldown
 
-            // if mainline self
-            if(c !== null && parseInt(c) === 103416) {
-
-                if(sessionStorage.getItem('sendListToday') === null) {
+            // 1. Has this player already sent a message in the last 7 days?
+            if (!lastSent || (now - parseInt(lastSent, 10)) > SEVEN_DAYS) {
+                // 2. Random roll with a probability of 0.5% (0.005)
+                if (Math.random() < 0.005) {
                     MainParser.sendExtMessage({
                         type: 'send2Api',
                         url: `${ApiURL}BuildingList/?world=${ExtWorld}&v=${extVersion}`,
                         data: JSON.stringify(srcLinks.FileList)
                     });
 
-                    sessionStorage.setItem('sendListToday', 'true');
+                    localStorage.setItem('sendListLastDate', now.toString());
                 }
             }
-        } 
+        }
         catch {
             console.log("parsing of ForgeHX failed");
         }
     },
+
 
     get: (filename, full = false, noerror = false) => {
         let CS = undefined;
@@ -86,7 +87,9 @@ let srcLinks = {
         else {
             CS = srcLinks.FileList[filename];
             if (!CS) {
-                if (!noerror) console.log (`file "${filename}" not in List`);
+                if (!noerror) {
+                    console.log(`file "${filename}" not in List`);
+                }
                 CSfilename = "/city/gui/citymap_icons/antiquedealer_flag";    //plunder_robber
                 filenameP[1]="png";
                 CS=srcLinks.FileList["/city/gui/citymap_icons/antiquedealer_flag.png"];
@@ -110,15 +113,18 @@ let srcLinks = {
 
 
     getReward:(icon) => {
-        let url3 = srcLinks.get(`/shared/unit_portraits/armyuniticons_90x90/armyuniticons_90x90_${icon}.png`,true, true) // does not work :(
-        let url2 = srcLinks.get(`/shared/icons/goods_large/${icon}.png`,true, true)
-        let url1 = srcLinks.get(`/shared/icons/reward_icons/reward_icon_${icon}.png`,true, true)
-        let url = url3
+        let url=""
+        if (icon.substring(1, 2) === "_") {
+            url = srcLinks.get(`/city/buildings/${MainParser.CityEntities?.[icon]?.asset_id?.replace(/(\D*?)_(.*)/,"$1_SS_$2")}.png`,true);
+        } else if (url==""|| url.indexOf("antiquedealer_flag") > -1) 
+            url = srcLinks.get(`/shared/unit_portraits/armyuniticons_90x90/armyuniticons_90x90_${icon}.jpg`,true, true) // does not work :(
 
-        if (url3.indexOf("antiquedealer_flag") > -1) 
-            url = url2
-        if (url2.indexOf("antiquedealer_flag") > -1) 
-            url = url1
+        if (url.indexOf("antiquedealer_flag") > -1) 
+            url = srcLinks.get(`/shared/icons/goods_large/${icon}.png`,true, true)
+        if (url.indexOf("antiquedealer_flag") > -1) 
+            url = srcLinks.get(`/shared/icons/reward_icons/reward_icon_${icon}.png`,true, true)
+        if (url.indexOf("antiquedealer_flag") > -1) 
+            url = srcLinks.get(`/city/buildings/${icon?.replace(/(\D*?)_(.*)/,"$1_SS_$2")}.png`,true);
 
         return url;
     },
@@ -133,7 +139,30 @@ let srcLinks = {
         }
 
         return url1;
+    },
+
+
+    icons: (x) => {
+        if (!x) return ""
+        let link = srcLinks.get(`/shared/icons/${x}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/shared/gui/upgrade/upgrade_icon_${x}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/shared/icons/${x.replace(/(.*?)_[0-9]+/gm,"$1")}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/shared/icons/goods/icon_fine_${x}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/shared/icons/reward_icons/reward_icon_${x}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/shared/icons/reward_icons/reward_icon_${x.replace(/(.*?)_[0-9]+/gm,"$1")}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/city/buildings/${x.replace(/(\D*?)_(.*)/,"$1_SS_$2")}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/city/buildings/${x.replace(/(.*?)_[0-9]+/gm,"$1").replace(/(\D*?)_(.*)/,"$1_SS_$2")}.png`,true,true);
+        if (link.includes("antiquedealer_flag")) link = srcLinks.get(`/city/buildings/${MainParser.CityEntities?.[x]?.asset_id?.replace(/(\D*?)_(.*)/,"$1_SS_$2")}.png`,true);
+        return `<img src=${link} alt="">`;
+    },
+
+
+    regEx: (regEx)=>{
+        file = Object.keys(srcLinks.FileList).find(x=>regEx.test(x))
+        let link = srcLinks.get(file,true,true);
+        return `<img src=${link} alt="">`;
     }
+
 }
 
 srcLinks.init()

@@ -1,6 +1,6 @@
 /*
  * **************************************************************************************
- * Copyright (C) 2022 FoE-Helper team - All Rights Reserved
+ * Copyright (C) 2026 FoE-Helper team - All Rights Reserved
  * You may use, distribute and modify this code under the
  * terms of the AGPL license.
  *
@@ -194,9 +194,9 @@ let Notice = {
 				subcontent = `<div class='tabs-sub'>`;
 
 				if(n['player_group']){
-					subcontent += 	`<span class="btn-default itm-btn" data-id="${n['player_group']}" data-group="${n['id']}">+ ${i18n('Boxes.Notice.NewPlayer')}</span>`;
+					subcontent += 	`<span class="btn itm-btn" data-id="${n['player_group']}" data-group="${n['id']}">+ ${i18n('Boxes.Notice.NewPlayer')}</span>`;
 				} else {
-					subcontent += 	`<span class="btn-default itm-btn" data-id="new">+ ${i18n('Boxes.Notice.NewSide')}</span>`;
+					subcontent += 	`<span class="btn itm-btn" data-id="new">+ ${i18n('Boxes.Notice.NewSide')}</span>`;
 				}
 
 				if(subtab.length > 0){
@@ -215,7 +215,7 @@ let Notice = {
 				content += `<ul class='horizontal dark-bg'>${tab.join('')}</ul>`;
 			}
 
-			content += 		`<span class="btn-default grp-btn" data-id="new">+ ${i18n('Boxes.Notice.NewGroup')}</span>`;
+			content += 		`<span class="btn grp-btn" data-id="new">+ ${i18n('Boxes.Notice.NewGroup')}</span>`;
 			content += 		div.join('');
 			content += `</div>`;
 
@@ -224,7 +224,7 @@ let Notice = {
 		// all empty
 		else {
 			content = `<div class='notices'>
-							<span class="btn-default grp-btn" data-id="new">+ ${i18n('Boxes.Notice.NewGroup')}</span>
+							<span class="btn grp-btn" data-id="new">+ ${i18n('Boxes.Notice.NewGroup')}</span>
 						</div>
 						<div id='notices_container'>
 							<div class="empty-notice">${i18n('Boxes.Notice.NewGroupDesc')}</div>
@@ -234,6 +234,14 @@ let Notice = {
 
 		// wait for html in the DOM
 		$('#notices').find('#noticesBody').html(content).promise().done(function(){
+
+			// ensure a valid tab is always active, otherwise Tabslet marks no tab
+			// as active and "grp" stays empty when a new item is saved
+			const grpCount = $('.notices > ul.horizontal > li').length;
+
+			if(!Number.isInteger(Notice.ActiveTab) || Notice.ActiveTab < 1 || Notice.ActiveTab > grpCount){
+				Notice.ActiveTab = 1;
+			}
 
 			// init Tabslet
 			$('.notices').tabslet({
@@ -310,8 +318,9 @@ let Notice = {
 			}
 		});
 		if (Notice.initDone) return;
-		$('body').on('click', '.btn-delete', function(){
-			Notice.DeleteElement($(this).data('type'), $(this).data('id'));
+		$('body').on('click', '.btn-delete', function() {
+			if (confirm(i18n('Boxes.Notice.ConfirmDelete')))
+				Notice.DeleteElement($(this).data('type'), $(this).data('id'));
 		});
 
 		$('body').on('click', '#notices-modalclose, #notices-modal-playersclose', function(){
@@ -382,7 +391,7 @@ let Notice = {
 
 		btn.attr({
 				role: 'button',
-				class: `btn-default save-${type}-name`,
+				class: `btn save-${type}-name`,
 				'data-id': id,
 				'data-type': type,
 				onclick: (type === 'itm' ? `Notice.SaveItemModal('${(id === 'new' ? "new" : id)}')` : `Notice.SaveModal('${type}', '${(id === 'new' ? "new" : id)}')`)
@@ -400,7 +409,7 @@ let Notice = {
 			delBtn
 				.attr({
 					role: 'button',
-					class: `btn-default btn-delete`,
+					class: `btn btn-delete`,
 					'data-id': id,
 					'data-type': type
 				})
@@ -491,10 +500,11 @@ let Notice = {
 				Notice.notes = resp['notice'];
 
 				if(id === 'new'){
-					Notice.ActiveTab = Notice.notes[Notice.notes.length -1];
+					Notice.ActiveTab = Notice.notes.length;
 
 				} else {
-					Notice.ActiveTab = Notice.notes.findIndex(idx => (idx.id === id)) +1;
+					// loose comparison, "id" comes from the DOM as a string
+					Notice.ActiveTab = Notice.notes.findIndex(idx => (idx.id == id)) +1;
 				}
 
 				$('#notices-modal').fadeToggle('fast', function(){
@@ -519,12 +529,18 @@ let Notice = {
 	SaveItemModal: (id)=> {
 		let nN = $('.inp-itm-name').val(),
 			txt = nN.trim(),
-			grp = $('ul.horizontal').find('li.active a').data('id'),
-			sortVal = !$(`.inp-itm-sort`).val() || ($(`#tab-${grp}`).find('ul.vertical li').length +1);
+			grp = $('ul.horizontal').find('li.active a').data('id');
 
 		if(txt === ''){
 			return;
 		}
+
+		// fallback: if no tab is marked as active use the first group, "grp" must never be empty
+		if(grp === undefined){
+			grp = $('ul.horizontal').find('li:first a').data('id');
+		}
+
+		let sortVal = $(`.inp-itm-sort`).val() || ($(`#tab-${grp}`).find('ul.vertical li').length +1);
 
 		txt = MainParser.ClearText(txt);
 
@@ -540,14 +556,15 @@ let Notice = {
 			else {
 				Notice.notes = resp['notice'];
 
-				const group = Notice.notes.find(e => (e.id === grp));
-				Notice.ActiveTab = Notice.notes.findIndex(idx => (idx.id === grp)) +1;
+				// loose comparisons, ids may arrive as strings from the DOM
+				const group = Notice.notes.find(e => (e.id == grp));
+				Notice.ActiveTab = Notice.notes.findIndex(idx => (idx.id == grp)) +1;
 
 				if(id === 'new'){
 					Notice.ActiveSubTab = group.items.length +1;
 
 				} else {
-					Notice.ActiveSubTab = group.items.findIndex(i => (i.id === id)) +1;
+					Notice.ActiveSubTab = group.items.findIndex(i => (i.id == id)) +1;
 				}
 
 				$('#notices-modal').fadeToggle('fast', function(){
@@ -851,6 +868,10 @@ let Notice = {
 			}
 			else {
 				Notice.notes = resp['notice'];
+
+				// the deleted element may have been the active one, jump back to the first tab
+				Notice.ActiveTab = 1;
+				Notice.ActiveSubTab = 1;
 
 				$('#notices-modal').fadeToggle('fast', function(){
 					$(this).remove();
